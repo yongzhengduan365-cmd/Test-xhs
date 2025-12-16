@@ -238,6 +238,15 @@ const App = () => {
     }, 200);
   };
 
+  const handleBack = () => {
+    if (currentQuestionIndex > 0) {
+      setCurrentQuestionIndex(prev => prev - 1);
+    } else if (selectedTest) {
+      // Return to intro page
+      window.location.hash = `#/test/${selectedTest.id}`;
+    }
+  };
+
   const copyLink = (e: React.MouseEvent, testId: string) => {
     e.stopPropagation();
     e.preventDefault();
@@ -378,7 +387,7 @@ const App = () => {
           <div className="max-w-2xl mx-auto">
             <div className="flex items-center justify-between mb-3">
               <button 
-                onClick={() => window.location.hash = `#/test/${selectedTest.id}`} 
+                onClick={handleBack} 
                 className="text-slate-400 hover:text-slate-600"
               >
                 <ChevronLeft className="w-6 h-6" />
