@@ -1,14 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { TESTS, generateQuestions, TEST_DEFINITIONS } from './constants';
 import { TestConfig, Question, AppState, AnalysisResult, ChartDataPoint } from './types';
 
 // Icons
-import { ArrowRight, ChevronLeft, RefreshCcw, Home, Share2, Sparkles, Brain, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, ChevronLeft, RefreshCcw, Share2, Sparkles, Brain, CheckCircle2, Play, Star, Copy } from 'lucide-react';
 
 // --- Components ---
 
-// 1. Radar Chart Component
 const RadarChart = ({ data }: { data: ChartDataPoint[] }) => {
   const size = 300;
   const center = size / 2;
@@ -79,7 +78,6 @@ const RadarChart = ({ data }: { data: ChartDataPoint[] }) => {
   );
 };
 
-// 2. Loading / Analyzing Component
 const AnalyzingView = () => (
   <div className="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center p-6 text-center">
     <div className="relative w-24 h-24 mb-8">
@@ -92,14 +90,9 @@ const AnalyzingView = () => (
   </div>
 );
 
-// --- Utils ---
-
-// Local Analysis Generation Logic
 const generateLocalAnalysis = (testId: string, answers: Record<number, number>): AnalysisResult => {
   const definition = TEST_DEFINITIONS[testId] || TEST_DEFINITIONS['default'];
   
-  // 1. Calculate Dimension Scores
-  // We map the 40 questions to 6 dimensions using modulo arithmetic
   const scores = [0, 0, 0, 0, 0, 0];
   const counts = [0, 0, 0, 0, 0, 0];
   
@@ -109,25 +102,20 @@ const generateLocalAnalysis = (testId: string, answers: Record<number, number>):
     counts[dimIndex] += 1;
   });
 
-  // Normalize scores to 0-100
   const normalizedScores = scores.map((score, i) => {
     const maxPossible = counts[i] * 5;
     return Math.round((score / maxPossible) * 100);
   });
 
-  // 2. Find Dominant Archetype
   const maxScoreIndex = normalizedScores.indexOf(Math.max(...normalizedScores));
   const archetype = definition.archetypes[maxScoreIndex] || definition.archetypes[0];
 
-  // 3. Generate Radar Chart Data
   const radarChart: ChartDataPoint[] = definition.dimensions.map((dim, i) => ({
     subject: dim,
     A: normalizedScores[i],
     fullMark: 100
   }));
 
-  // 4. Generate Traits (Pseudo-random based on scores)
-  // Pick traits based on the top 3 scoring dimensions
   const sortedIndices = normalizedScores
     .map((s, i) => ({ s, i }))
     .sort((a, b) => b.s - a.s)
@@ -140,8 +128,6 @@ const generateLocalAnalysis = (testId: string, answers: Record<number, number>):
     normalizedScores[sortedIndices[5]] < 50 ? "低" + definition.dimensions[sortedIndices[5]] : "均衡发展"
   ];
 
-  // 5. Generate Text Content
-  // We simulate detailed analysis by combining template strings based on the dominant trait
   const detailedAnalysis = `
 ### 核心性格底色
 你展现出了强烈的**${archetype}**特质。在${definition.dimensions[maxScoreIndex]}维度上的显著表现，意味着你拥有独特的感知世界的方式。${definition.desc_templates[maxScoreIndex]}
@@ -153,7 +139,6 @@ const generateLocalAnalysis = (testId: string, answers: Record<number, number>):
 由于${definition.dimensions[sortedIndices[5]]}相对较弱，你可能在某些特定情境下会感到能量受阻。建议在日常生活中有意识地觉察自己的回避倾向，与其对抗不如尝试接纳，这将是你近期成长的关键突破口。
   `.trim();
 
-  // 6. Generate Life Aspects
   const lifeAspects = {
     work: `以你的${archetype}特质，在工作中你更适合能够发挥${definition.dimensions[maxScoreIndex]}的角色。建议寻找能够提供自主空间的环境，避免过于机械化的重复劳动消耗你的灵性。`,
     love: `在亲密关系中，你渴望的是深度的共鸣而非表面的陪伴。你的${definition.dimensions[sortedIndices[0]]}特质既是吸引力也是双刃剑，试着向伴侣展示你${definition.dimensions[sortedIndices[5]]}的一面，会带来意想不到的亲密感。`,
@@ -171,8 +156,7 @@ const generateLocalAnalysis = (testId: string, answers: Record<number, number>):
   };
 };
 
-
-// --- Main App Component ---
+// --- App ---
 
 const App = () => {
   const [view, setView] = useState<AppState>(AppState.HOME);
@@ -181,27 +165,68 @@ const App = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  const startTest = (test: TestConfig) => {
-    const qs = generateQuestions(test.title);
-    setQuestions(qs);
-    setSelectedTest(test);
-    setView(AppState.TESTING);
-    setCurrentQuestionIndex(0);
-    setAnswers({});
-    setResult(null);
-    setError(null);
-    window.scrollTo(0, 0);
+  // --- Router Logic ---
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash; // e.g., #/test/animal-persona
+      
+      if (hash.startsWith('#/test/')) {
+        const parts = hash.split('/');
+        const testId = parts[2];
+        const mode = parts[3]; // 'play'
+
+        const test = TESTS.find(t => t.id === testId);
+        if (test) {
+          setSelectedTest(test);
+          setQuestions(generateQuestions(test.title));
+          
+          if (mode === 'play') {
+             setView(AppState.TESTING);
+          } else {
+             // 如果在 intro 页面，重置测试状态
+             setResult(null);
+             setAnswers({});
+             setCurrentQuestionIndex(0);
+             setView(AppState.INTRO); // 默认为介绍页，无“返回主页”按钮
+          }
+        }
+      } else {
+        // Root path - Home Dashboard for Seller
+        setView(AppState.HOME);
+        setSelectedTest(null);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    handleHashChange(); // Init on load
+
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const startTestFlow = () => {
+    if (selectedTest) {
+      setCurrentQuestionIndex(0);
+      setAnswers({});
+      setResult(null);
+      window.location.hash = `#/test/${selectedTest.id}/play`;
+    }
+  };
+
+  const finishTest = () => {
+    setView(AppState.ANALYZING);
+    setTimeout(() => {
+        if (!selectedTest) return;
+        const analysisData = generateLocalAnalysis(selectedTest.id, answers);
+        setResult(analysisData);
+        setView(AppState.RESULT);
+    }, 2000);
   };
 
   const handleAnswer = (value: number) => {
     const q = questions[currentQuestionIndex];
     if (!q) return; 
-
     setAnswers(prev => ({ ...prev, [q.id]: value }));
-    
-    // Auto advance
     setTimeout(() => {
       if (currentQuestionIndex < questions.length - 1) {
         setCurrentQuestionIndex(prev => prev + 1);
@@ -210,62 +235,42 @@ const App = () => {
       } else {
         finishTest();
       }
-    }, 250);
-  };
-
-  const finishTest = async () => {
-    setView(AppState.ANALYZING);
-    
-    // Simulate network delay for better UX (makes it feel like "analyzing")
-    setTimeout(() => {
-      try {
-        if (!selectedTest) throw new Error("No test selected");
-        
-        const analysisData = generateLocalAnalysis(selectedTest.id, answers);
-        
-        setResult(analysisData);
-        setView(AppState.RESULT);
-      } catch (err) {
-        console.error(err);
-        setError("分析生成失败，请重试。");
-        setView(AppState.HOME);
-      }
-    }, 2000);
+    }, 200);
   };
 
   const handleShare = async () => {
     if (!selectedTest || !result) return;
-
-    const text = `我在灵镜 SoulMirror 的【${selectedTest.title}】中测出了：${result.mainArchetype}\n"${result.shortQuote}"\n\n快来测测你的灵魂原型吧！`;
-    const url = window.location.href;
+    const text = `我在灵镜 SoulMirror 的【${selectedTest.title}】中测出了：${result.mainArchetype}\n快来测测你的灵魂原型吧！`;
+    const url = window.location.href.split('#')[0] + `#/test/${selectedTest.id}`; 
 
     if (navigator.share) {
       try {
-        await navigator.share({
-          title: '灵镜 SoulMirror - 专业心理测评',
-          text: text,
-          url: url,
-        });
-      } catch (err) {
-        console.log('Error sharing:', err);
-      }
+        await navigator.share({ title: selectedTest.title, text: text, url: url });
+      } catch (err) { console.log(err); }
     } else {
       try {
         await navigator.clipboard.writeText(`${text} ${url}`);
-        alert('结果已复制到剪贴板，快去分享吧！');
-      } catch (err) {
-        console.error('Failed to copy:', err);
-      }
+        alert('链接已复制，快去分享吧！');
+      } catch (err) { console.error(err); }
     }
+  };
+
+  const copyLink = (e: React.MouseEvent, testId: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const url = window.location.origin + window.location.pathname + `#/test/${testId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      alert(`【${testId}】的购买链接已复制！\n您可以发送给客户了。`);
+    });
   };
 
   // --- Render Views ---
 
+  // 1. Home View (仅供商家使用：商品目录)
   if (view === AppState.HOME) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-20">
-        {/* Header */}
-        <header className="bg-white border-b border-slate-100 sticky top-0 z-10">
+      <div className="min-h-screen bg-slate-50 pb-20 animate-fade-in">
+        <header className="bg-white border-b border-slate-100 sticky top-0 z-10 shadow-sm/50 backdrop-blur-md bg-white/90">
           <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="w-6 h-6 text-indigo-600" />
@@ -273,51 +278,46 @@ const App = () => {
                 灵镜 SoulMirror
               </h1>
             </div>
-            <span className="text-xs font-medium px-2 py-1 bg-slate-100 rounded-full text-slate-500">
-              专业测评
-            </span>
+            <span className="text-xs font-medium px-3 py-1 bg-amber-100 text-amber-700 rounded-full">商家后台目录</span>
           </div>
         </header>
 
-        {/* Hero Section */}
-        <div className="bg-indigo-600 text-white px-6 py-12 mb-8">
-          <div className="max-w-4xl mx-auto text-center">
-            <h2 className="text-3xl font-bold mb-4">探索未知的自己</h2>
-            <p className="text-indigo-100 mb-0 max-w-lg mx-auto">
-              包含MBTI、拟兽化、心理动力学等12项专业深度测评，本地算法驱动的万字解析，带你看清灵魂的模样。
+        <div className="bg-indigo-900 text-white px-6 py-10 mb-8">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-2xl font-bold mb-2">测试产品列表</h2>
+            <p className="text-indigo-200 text-sm">
+              点击卡片右侧的复制按钮获取独立售卖链接。
+              <br/>
+              客户通过该链接进入只能访问特定测试，无法跳转其他页面。
             </p>
           </div>
         </div>
 
-        {/* Grid */}
-        <main className="max-w-4xl mx-auto px-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+        <main className="max-w-4xl mx-auto px-4 grid grid-cols-1 gap-4">
           {TESTS.map(test => (
             <div 
               key={test.id}
-              onClick={() => startTest(test)}
-              className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-lg hover:border-indigo-100 transition-all cursor-pointer group flex items-start gap-4"
+              className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 group hover:border-indigo-500 transition-all relative"
             >
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${test.color}`}>
                 {test.icon}
               </div>
-              <div className="flex-1">
-                <h3 className="font-bold text-slate-800 mb-1 group-hover:text-indigo-600 transition-colors">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-slate-800 text-lg truncate">
                   {test.title}
                 </h3>
-                <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed">
-                  {test.description}
+                <p className="text-xs text-slate-400 truncate">
+                  ID: {test.id} • {test.questionCount}题
                 </p>
-                <div className="mt-3 flex items-center gap-2 text-xs text-slate-400 font-medium">
-                  <span className="flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> {test.questionCount}题
-                  </span>
-                  <span>•</span>
-                  <span>约10分钟</span>
-                </div>
               </div>
-              <div className="self-center">
-                <ArrowRight className="w-5 h-5 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
-              </div>
+              
+              {/* 复制链接按钮 */}
+              <button
+                onClick={(e) => copyLink(e, test.id)}
+                className="shrink-0 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-indigo-600 hover:text-white transition-colors"
+              >
+                <Copy className="w-4 h-4" /> 复制链接
+              </button>
             </div>
           ))}
         </main>
@@ -325,6 +325,57 @@ const App = () => {
     );
   }
 
+  // 2. Intro View (客户看到的：单项测试落地页) - 无返回主页按钮
+  if (view === AppState.INTRO && selectedTest) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col animate-slide-up">
+        {/* Navigation Bar - 仅显示标题，无返回按钮 */}
+        <div className="bg-white/80 backdrop-blur-sm sticky top-0 z-20 px-6 py-4 flex items-center justify-center border-b border-slate-100">
+           <span className="text-sm font-bold text-slate-800 flex items-center gap-2">
+             <Sparkles className="w-4 h-4 text-indigo-600"/> 灵镜专业测评
+           </span>
+        </div>
+
+        <div className="flex-1 flex flex-col items-center p-6 max-w-lg mx-auto w-full">
+           <div className={`w-24 h-24 rounded-3xl flex items-center justify-center text-5xl mb-6 shadow-lg ${selectedTest.color} mt-8`}>
+             {selectedTest.icon}
+           </div>
+           
+           <h1 className="text-2xl font-bold text-slate-900 text-center mb-4">{selectedTest.title}</h1>
+           
+           <div className="flex gap-4 mb-8 text-sm text-slate-500">
+              <span className="flex items-center gap-1"><CheckCircle2 className="w-4 h-4 text-green-500"/> {selectedTest.questionCount}道精选题</span>
+              <span className="flex items-center gap-1"><Star className="w-4 h-4 text-orange-500"/> 深度分析</span>
+           </div>
+
+           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 w-full mb-8">
+             <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
+               <Sparkles className="w-4 h-4 text-indigo-500"/> 测试简介
+             </h3>
+             <p className="text-slate-600 leading-relaxed text-sm">
+               {selectedTest.description}
+               <br/><br/>
+               本测试基于专业心理学模型设计，通过潜意识投射与行为分析，为您生成专属的万字性格解析报告。
+             </p>
+           </div>
+
+           <div className="mt-auto w-full pb-8">
+             <button 
+               onClick={startTestFlow}
+               className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+             >
+               <Play className="w-5 h-5 fill-current" /> 开始测试
+             </button>
+             <p className="text-center text-xs text-slate-400 mt-4">
+               测评结果仅供参考 · 保护个人隐私
+             </p>
+           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Testing View - 仅允许返回介绍页，不允许回主页
   if (view === AppState.TESTING && selectedTest) {
     if (!questions || questions.length === 0 || !questions[currentQuestionIndex]) {
       return (
@@ -342,18 +393,23 @@ const App = () => {
         {/* Progress Header */}
         <div className="sticky top-0 bg-white z-20 px-6 py-4 border-b border-slate-100">
           <div className="max-w-2xl mx-auto">
-            <div className="flex items-center justify-between mb-2">
-              <button onClick={() => setView(AppState.HOME)} className="text-slate-400 hover:text-slate-600">
+            <div className="flex items-center justify-between mb-3">
+              <button 
+                onClick={() => window.location.hash = `#/test/${selectedTest.id}`} 
+                className="text-slate-400 hover:text-slate-600"
+              >
                 <ChevronLeft className="w-6 h-6" />
               </button>
-              <span className="text-sm font-semibold text-slate-600">
-                {currentQuestionIndex + 1} / {questions.length}
+              <span className="text-sm font-bold text-slate-600 tabular-nums">
+                <span className="text-indigo-600 text-lg">{currentQuestionIndex + 1}</span>
+                <span className="text-slate-300 mx-1">/</span>
+                {questions.length}
               </span>
               <div className="w-6"></div> 
             </div>
             <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
               <div 
-                className="h-full bg-indigo-500 transition-all duration-300 ease-out"
+                className="h-full bg-indigo-500 transition-all duration-300 ease-out rounded-full"
                 style={{ width: `${progress}%` }}
               ></div>
             </div>
@@ -361,12 +417,12 @@ const App = () => {
         </div>
 
         {/* Question Area */}
-        <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto px-6 py-10 w-full">
+        <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto px-6 py-10 w-full animate-fade-in">
           <span className="inline-block px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-xs font-bold mb-6 w-fit">
             {selectedTest.title}
           </span>
           
-          <h2 className="text-2xl font-bold text-slate-800 leading-normal mb-12 min-h-[120px]">
+          <h2 className="text-2xl font-bold text-slate-800 leading-normal mb-12 min-h-[80px]">
             {currentQ.text}
           </h2>
 
@@ -375,17 +431,17 @@ const App = () => {
               <button
                 key={opt.value}
                 onClick={() => handleAnswer(opt.value as number)}
-                className={`w-full p-4 rounded-xl border-2 text-left transition-all duration-200 flex items-center justify-between group
+                className={`w-full p-4 rounded-xl border-2 text-left transition-all duration-200 flex items-center justify-between group active:scale-[0.98]
                   ${answers[currentQ.id] === opt.value 
                     ? 'border-indigo-500 bg-indigo-50 text-indigo-700 font-medium' 
                     : 'border-slate-100 hover:border-indigo-200 hover:bg-slate-50 text-slate-600'
                   }`}
               >
                 <span>{opt.label}</span>
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors
                   ${answers[currentQ.id] === opt.value 
                     ? 'border-indigo-500' 
-                    : 'border-slate-300 group-hover:border-indigo-300'
+                    : 'border-slate-200 group-hover:border-indigo-300'
                   }`}>
                   {answers[currentQ.id] === opt.value && <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full" />}
                 </div>
@@ -397,22 +453,25 @@ const App = () => {
     );
   }
 
+  // 4. Analyzing View
   if (view === AppState.ANALYZING) {
     return <AnalyzingView />;
   }
 
+  // 5. Result View - 仅允许分享或重测，无“更多测试”
   if (view === AppState.RESULT && result && selectedTest) {
     return (
       <div className="min-h-screen bg-slate-50 animate-fade-in">
-        <div className="bg-indigo-900 text-white pb-20 pt-10 px-6 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
-          {/* Decorative background elements */}
+        <div className="bg-indigo-900 text-white pb-24 pt-10 px-6 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
           <div className="absolute top-0 left-0 w-64 h-64 bg-indigo-500 opacity-20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2"></div>
           <div className="absolute bottom-0 right-0 w-64 h-64 bg-purple-500 opacity-20 rounded-full blur-3xl translate-x-1/2 translate-y-1/2"></div>
           
           <div className="max-w-3xl mx-auto relative z-10 text-center">
-            <span className="inline-block px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-medium mb-4 border border-white/20">
-              {selectedTest.title} • 测试报告
-            </span>
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-medium mb-6 border border-white/20">
+               <Sparkles className="w-3 h-3" />
+               {selectedTest.title} · 专属报告
+            </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight leading-tight">
               {result.mainArchetype}
             </h1>
@@ -420,7 +479,7 @@ const App = () => {
               "{result.shortQuote}"
             </p>
 
-            <div className="flex flex-wrap justify-center gap-2 mb-6">
+            <div className="flex flex-wrap justify-center gap-2">
               {result.personalityTraits.map((trait, i) => (
                 <span key={i} className="px-3 py-1 bg-white/10 border border-white/20 rounded-full text-sm">
                   #{trait}
@@ -430,19 +489,19 @@ const App = () => {
           </div>
         </div>
 
-        <div className="max-w-3xl mx-auto px-6 -mt-16 pb-12 relative z-20 space-y-6">
+        <div className="max-w-3xl mx-auto px-6 -mt-20 pb-12 relative z-20 space-y-6">
           
           {/* Chart Card */}
-          <div className="bg-white rounded-3xl p-6 shadow-xl shadow-slate-200/50">
-            <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2">
+          <div className="bg-white rounded-3xl p-6 shadow-xl shadow-indigo-900/5">
+            <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2 border-b border-slate-50 pb-3">
               <Brain className="w-5 h-5 text-indigo-500" /> 维度分析
             </h3>
             <RadarChart data={result.radarChart} />
           </div>
 
           {/* Detailed Analysis */}
-          <div className="bg-white rounded-3xl p-6 shadow-xl shadow-slate-200/50">
-            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <div className="bg-white rounded-3xl p-6 shadow-xl shadow-indigo-900/5">
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-50 pb-3">
               <Sparkles className="w-5 h-5 text-indigo-500" /> 深度解读
             </h3>
             <div className="prose prose-slate prose-sm max-w-none text-slate-600 leading-relaxed whitespace-pre-wrap">
@@ -453,44 +512,37 @@ const App = () => {
           {/* Life Aspects Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {Object.entries(result.lifeAspects).map(([key, value]) => (
-              <div key={key} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-                <h4 className="font-bold text-slate-800 capitalize mb-2 flex items-center gap-2">
-                  {key === 'work' && '💼 事业与成就'}
-                  {key === 'love' && '❤️ 亲密关系'}
-                  {key === 'social' && '👯 社交互动'}
-                  {key === 'growth' && '🌱 自我成长'}
+              <div key={key} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:border-indigo-50 transition-colors">
+                <h4 className="font-bold text-slate-800 capitalize mb-3 flex items-center gap-2 text-sm">
+                  {key === 'work' && <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs">💼</span>}
+                  {key === 'love' && <span className="w-6 h-6 rounded-lg bg-pink-50 text-pink-600 flex items-center justify-center text-xs">❤️</span>}
+                  {key === 'social' && <span className="w-6 h-6 rounded-lg bg-green-50 text-green-600 flex items-center justify-center text-xs">👯</span>}
+                  {key === 'growth' && <span className="w-6 h-6 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center text-xs">🌱</span>}
+                  
+                  {key === 'work' && '事业与成就'}
+                  {key === 'love' && '亲密关系'}
+                  {key === 'social' && '社交互动'}
+                  {key === 'growth' && '自我成长'}
                 </h4>
-                <p className="text-sm text-slate-600 leading-relaxed">{value}</p>
+                <p className="text-sm text-slate-600 leading-relaxed text-justify">{value}</p>
               </div>
             ))}
           </div>
 
-          {/* Action Footer */}
+          {/* Action Footer - Only Share and Retest */}
           <div className="flex flex-col gap-3 mt-8">
             <button
               onClick={handleShare}
-              className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3.5 rounded-xl font-bold hover:shadow-lg transition-all flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-4 rounded-xl font-bold hover:shadow-lg hover:shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 active:scale-95"
             >
               <Share2 className="w-5 h-5" /> 分享我的测试结果
             </button>
-            <div className="flex gap-3">
-              <button 
-                onClick={() => {
-                  setView(AppState.HOME);
-                  setQuestions([]);
-                  setAnswers({});
-                }}
-                className="flex-1 bg-slate-200 text-slate-700 py-3.5 rounded-xl font-bold hover:bg-slate-300 transition-colors flex items-center justify-center gap-2"
-              >
-                <Home className="w-5 h-5" /> 返回主页
-              </button>
-              <button 
-                onClick={() => startTest(selectedTest)}
-                className="flex-1 bg-white border-2 border-indigo-100 text-indigo-600 py-3.5 rounded-xl font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
-              >
-                <RefreshCcw className="w-5 h-5" /> 再测一次
-              </button>
-            </div>
+            <button 
+              onClick={startTestFlow}
+              className="w-full bg-white border-2 border-indigo-100 text-indigo-600 py-3.5 rounded-xl font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 active:scale-95"
+            >
+              <RefreshCcw className="w-5 h-5" /> 再测一次
+            </button>
           </div>
         </div>
       </div>

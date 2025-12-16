@@ -38,6 +38,7 @@ export interface AnalysisResult {
 
 export enum AppState {
   HOME = 'HOME',
+  INTRO = 'INTRO',
   TESTING = 'TESTING',
   ANALYZING = 'ANALYZING',
   RESULT = 'RESULT',
