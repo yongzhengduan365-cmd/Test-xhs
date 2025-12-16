@@ -4,7 +4,7 @@ import { TESTS, generateQuestions, TEST_DEFINITIONS } from './constants';
 import { TestConfig, Question, AppState, AnalysisResult, ChartDataPoint } from './types';
 
 // Icons
-import { ArrowRight, ChevronLeft, RefreshCcw, Share2, Sparkles, Brain, CheckCircle2, Play, Star, Copy } from 'lucide-react';
+import { ArrowRight, ChevronLeft, RefreshCcw, Sparkles, Brain, CheckCircle2, Play, Star, Copy } from 'lucide-react';
 
 // --- Components ---
 
@@ -236,23 +236,6 @@ const App = () => {
         finishTest();
       }
     }, 200);
-  };
-
-  const handleShare = async () => {
-    if (!selectedTest || !result) return;
-    const text = `我在灵镜 SoulMirror 的【${selectedTest.title}】中测出了：${result.mainArchetype}\n快来测测你的灵魂原型吧！`;
-    const url = window.location.href.split('#')[0] + `#/test/${selectedTest.id}`; 
-
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: selectedTest.title, text: text, url: url });
-      } catch (err) { console.log(err); }
-    } else {
-      try {
-        await navigator.clipboard.writeText(`${text} ${url}`);
-        alert('链接已复制，快去分享吧！');
-      } catch (err) { console.error(err); }
-    }
   };
 
   const copyLink = (e: React.MouseEvent, testId: string) => {
@@ -529,14 +512,8 @@ const App = () => {
             ))}
           </div>
 
-          {/* Action Footer - Only Share and Retest */}
+          {/* Action Footer - Only Retest */}
           <div className="flex flex-col gap-3 mt-8">
-            <button
-              onClick={handleShare}
-              className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-4 rounded-xl font-bold hover:shadow-lg hover:shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 active:scale-95"
-            >
-              <Share2 className="w-5 h-5" /> 分享我的测试结果
-            </button>
             <button 
               onClick={startTestFlow}
               className="w-full bg-white border-2 border-indigo-100 text-indigo-600 py-3.5 rounded-xl font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 active:scale-95"
