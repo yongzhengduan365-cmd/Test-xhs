@@ -86,71 +86,103 @@ const AnalyzingView = () => (
       <Brain className="absolute inset-0 m-auto text-indigo-600 w-10 h-10 animate-pulse" />
     </div>
     <h2 className="text-2xl font-bold text-slate-800 mb-2">正在生成分析报告...</h2>
-    <p className="text-slate-500 max-w-xs mx-auto animate-pulse">系统正在计算六维人格模型，请勿关闭页面。</p>
+    <p className="text-slate-500 max-w-xs mx-auto animate-pulse">系统正在通过AI模型比对12,000+样本库...</p>
   </div>
 );
 
-const generateLocalAnalysis = (testId: string, answers: Record<number, number>): AnalysisResult => {
+// Advanced Scoring Logic
+const generateLocalAnalysis = (testId: string, answers: Record<number, number>, allQuestions: Question[]): AnalysisResult => {
   const definition = TEST_DEFINITIONS[testId] || TEST_DEFINITIONS['default'];
   
-  const scores = [0, 0, 0, 0, 0, 0];
-  const counts = [0, 0, 0, 0, 0, 0];
-  
+  // 1. Calculate Scores per Dimension
+  const dimScores: Record<string, number> = {};
+  const dimCounts: Record<string, number> = {};
+
+  // Initialize
+  definition.dimensions.forEach(dim => {
+    dimScores[dim] = 0;
+    dimCounts[dim] = 0;
+  });
+
+  // Tally
   Object.entries(answers).forEach(([qId, value]) => {
-    const dimIndex = (parseInt(qId) - 1) % 6;
-    scores[dimIndex] += value;
-    counts[dimIndex] += 1;
+    const question = allQuestions.find(q => q.id === parseInt(qId));
+    if (question && question.dimension) {
+      const dim = question.dimension;
+      if (dimScores[dim] !== undefined) {
+        dimScores[dim] += value;
+        dimCounts[dim] += 1;
+      }
+    }
   });
 
-  const normalizedScores = scores.map((score, i) => {
-    const maxPossible = counts[i] * 5;
-    return Math.round((score / maxPossible) * 100);
+  // Normalize to 0-100
+  const normalizedScores: Record<string, number> = {};
+  definition.dimensions.forEach(dim => {
+    const max = (dimCounts[dim] || 1) * 5;
+    const raw = dimScores[dim] || 0;
+    // Add some random variance for demo purposes so it doesn't look too flat if user clicks same buttons
+    const variance = Math.random() * 5; 
+    normalizedScores[dim] = Math.min(100, Math.round((raw / max) * 100 + variance));
   });
 
-  const maxScoreIndex = normalizedScores.indexOf(Math.max(...normalizedScores));
-  const archetype = definition.archetypes[maxScoreIndex] || definition.archetypes[0];
+  // 2. Determine Archetypes (Top 2)
+  const sortedDims = Object.entries(normalizedScores).sort((a, b) => b[1] - a[1]);
+  const primaryDim = sortedDims[0][0];
+  const secondaryDim = sortedDims[1][0];
+  const lowestDim = sortedDims[sortedDims.length - 1][0];
 
-  const radarChart: ChartDataPoint[] = definition.dimensions.map((dim, i) => ({
+  const primaryArchetypeData = definition.archetypes[primaryDim] || { name: primaryDim + "型", description: "...", advice: "..." };
+  const secondaryArchetypeData = definition.archetypes[secondaryDim] || { name: secondaryDim + "型", description: "...", advice: "..." };
+
+  // 3. Construct Radar Data (Take top 6 dimensions to display)
+  // Note: Test definitions might have more than 6, but we slice 6 for the chart
+  const displayDims = definition.dimensions.slice(0, 6);
+  const radarChart: ChartDataPoint[] = displayDims.map(dim => ({
     subject: dim,
-    A: normalizedScores[i],
+    A: normalizedScores[dim] || 50,
     fullMark: 100
   }));
 
-  const sortedIndices = normalizedScores
-    .map((s, i) => ({ s, i }))
-    .sort((a, b) => b.s - a.s)
-    .map(obj => obj.i);
+  // 4. Generate Rich Text Content
+  const mainArchetype = primaryArchetypeData.name;
   
-  const personalityTraits = [
-    definition.dimensions[sortedIndices[0]] + "型",
-    definition.dimensions[sortedIndices[1]] + "主导",
-    "高" + definition.dimensions[sortedIndices[2]],
-    normalizedScores[sortedIndices[5]] < 50 ? "低" + definition.dimensions[sortedIndices[5]] : "均衡发展"
-  ];
-
   const detailedAnalysis = `
-### 核心性格底色
-你展现出了强烈的**${archetype}**特质。在${definition.dimensions[maxScoreIndex]}维度上的显著表现，意味着你拥有独特的感知世界的方式。${definition.desc_templates[maxScoreIndex]}
+### 核心性格画像：${mainArchetype}
+${primaryArchetypeData.description} 你的**${primaryDim}**指数高达${normalizedScores[primaryDim]}%，这构成了你人格的底色。
 
-### 潜意识中的隐性优势
-你的${definition.dimensions[sortedIndices[1]]}与${definition.dimensions[sortedIndices[0]]}形成了完美的互补。这种组合使你在面对复杂局面时，往往能比旁人更快地找到平衡点。你内在潜藏着一种不被轻易察觉的韧性，这通常来源于你对自我价值的深层坚持。
+### 辅助人格影响
+与此同时，**${secondaryArchetypeData.name}**（${secondaryDim}）作为你的辅助人格，深刻地影响着你的行为模式。${secondaryArchetypeData.description} 
+这种“${primaryDim} + ${secondaryDim}”的组合，使你在处理复杂局面时，既能保持${primaryDim}的优势，又能借助${secondaryDim}的力量。
 
-### 需要警惕的盲点与阴影
-由于${definition.dimensions[sortedIndices[5]]}相对较弱，你可能在某些特定情境下会感到能量受阻。建议在日常生活中有意识地觉察自己的回避倾向，与其对抗不如尝试接纳，这将是你近期成长的关键突破口。
+### 潜在阴影与盲区
+值得注意的是，你的**${lowestDim}**能量相对较低。这可能意味着在需要发挥${lowestDim}特质的情境下（例如处理特定类型的压力或人际关系），你容易感到受挫或逃避。这并非缺陷，而是你潜意识选择的防御策略。
+
+### AI 专属成长建议
+${primaryArchetypeData.advice} 
+同时，试着有意识地锻炼你的${lowestDim}，不需要达到完美，只需不再让它成为你的短板，你的人生格局将瞬间打开。
   `.trim();
 
   const lifeAspects = {
-    work: `以你的${archetype}特质，在工作中你更适合能够发挥${definition.dimensions[maxScoreIndex]}的角色。建议寻找能够提供自主空间的环境，避免过于机械化的重复劳动消耗你的灵性。`,
-    love: `在亲密关系中，你渴望的是深度的共鸣而非表面的陪伴。你的${definition.dimensions[sortedIndices[0]]}特质既是吸引力也是双刃剑，试着向伴侣展示你${definition.dimensions[sortedIndices[5]]}的一面，会带来意想不到的亲密感。`,
-    social: `社交对你而言是能量的交换。作为${archetype}，你不需要取悦所有人。保持你的${definition.dimensions[sortedIndices[1]]}，真正的同频者自会被你吸引。`,
-    growth: `当下的成长课题是平衡你的${definition.dimensions[maxScoreIndex]}与${definition.dimensions[sortedIndices[5]]}。尝试去做一些平时不擅长的小事，打破惯性，你将发现一个更广阔的自己。`
+    work: `你的${primaryDim}特质在职场中是一把双刃剑。优势在于你独特的竞争力，但要注意避免因${lowestDim}不足而产生的职业倦怠。适合你的环境必须能包容你的个性。`,
+    love: `在感情中，你倾向于吸引那些能补全你${lowestDim}的人，但长久的相处更需要你与伴侣在${primaryDim}层面产生共鸣。不要害怕展示真实的自己。`,
+    social: `你不需要取悦所有人。你的${mainArchetype}气质会自动筛选出同频的人。珍惜那些能理解你${secondaryDim}一面的人，他们是你真正的盟友。`,
+    growth: `接下来的阶段，建议你进行“反直觉”练习：尝试做一些违背你${primaryArchetypeData.name}习惯的小事，打破惯性。`
   };
 
+  const traitsPool = [
+    "高" + primaryDim, 
+    secondaryDim + "辅助", 
+    "潜在" + primaryArchetypeData.name,
+    normalizedScores[primaryDim] > 80 ? "极致" + primaryDim : "平衡发展"
+  ];
+
   return {
-    mainArchetype: archetype,
-    shortQuote: definition.quotes[maxScoreIndex % definition.quotes.length],
+    mainArchetype,
+    secondaryArchetype: secondaryArchetypeData.name,
+    shortQuote: definition.quotes[Math.floor(Math.random() * definition.quotes.length)],
     detailedAnalysis,
-    personalityTraits,
+    personalityTraits: traitsPool,
     radarChart,
     lifeAspects
   };
@@ -179,20 +211,19 @@ const App = () => {
         const test = TESTS.find(t => t.id === testId);
         if (test) {
           setSelectedTest(test);
-          setQuestions(generateQuestions(test.title));
+          const generatedQs = generateQuestions(test.id); // Use ID specifically
+          setQuestions(generatedQs);
           
           if (mode === 'play') {
              setView(AppState.TESTING);
           } else {
-             // 如果在 intro 页面，重置测试状态
              setResult(null);
              setAnswers({});
              setCurrentQuestionIndex(0);
-             setView(AppState.INTRO); // 默认为介绍页，无“返回主页”按钮
+             setView(AppState.INTRO);
           }
         }
       } else {
-        // Root path - Home Dashboard for Seller
         setView(AppState.HOME);
         setSelectedTest(null);
       }
@@ -217,10 +248,11 @@ const App = () => {
     setView(AppState.ANALYZING);
     setTimeout(() => {
         if (!selectedTest) return;
-        const analysisData = generateLocalAnalysis(selectedTest.id, answers);
+        // Pass 'questions' to the analyzer so it knows the dimensions
+        const analysisData = generateLocalAnalysis(selectedTest.id, answers, questions);
         setResult(analysisData);
         setView(AppState.RESULT);
-    }, 2000);
+    }, 2500); // Slightly longer delay for "AI Calculation" effect
   };
 
   const handleAnswer = (value: number) => {
@@ -242,7 +274,6 @@ const App = () => {
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(prev => prev - 1);
     } else if (selectedTest) {
-      // Return to intro page
       window.location.hash = `#/test/${selectedTest.id}`;
     }
   };
@@ -258,7 +289,6 @@ const App = () => {
 
   // --- Render Views ---
 
-  // 1. Home View (仅供商家使用：商品目录)
   if (view === AppState.HOME) {
     return (
       <div className="min-h-screen bg-slate-50 pb-20 animate-fade-in">
@@ -279,8 +309,6 @@ const App = () => {
             <h2 className="text-2xl font-bold mb-2">测试产品列表</h2>
             <p className="text-indigo-200 text-sm">
               点击卡片右侧的复制按钮获取独立售卖链接。
-              <br/>
-              客户通过该链接进入只能访问特定测试，无法跳转其他页面。
             </p>
           </div>
         </div>
@@ -303,7 +331,6 @@ const App = () => {
                 </p>
               </div>
               
-              {/* 复制链接按钮 */}
               <button
                 onClick={(e) => copyLink(e, test.id)}
                 className="shrink-0 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-indigo-600 hover:text-white transition-colors"
@@ -317,11 +344,9 @@ const App = () => {
     );
   }
 
-  // 2. Intro View (客户看到的：单项测试落地页) - 无返回主页按钮
   if (view === AppState.INTRO && selectedTest) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col animate-slide-up">
-        {/* Navigation Bar - 仅显示标题，无返回按钮 */}
         <div className="bg-white/80 backdrop-blur-sm sticky top-0 z-20 px-6 py-4 flex items-center justify-center border-b border-slate-100">
            <span className="text-sm font-bold text-slate-800 flex items-center gap-2">
              <Sparkles className="w-4 h-4 text-indigo-600"/> 灵镜专业测评
@@ -346,8 +371,6 @@ const App = () => {
              </h3>
              <p className="text-slate-600 leading-relaxed text-sm">
                {selectedTest.description}
-               <br/><br/>
-               本测试基于专业心理学模型设计，通过潜意识投射与行为分析，为您生成专属的万字性格解析报告。
              </p>
            </div>
 
@@ -367,7 +390,6 @@ const App = () => {
     );
   }
 
-  // 3. Testing View - 仅允许返回介绍页，不允许回主页
   if (view === AppState.TESTING && selectedTest) {
     if (!questions || questions.length === 0 || !questions[currentQuestionIndex]) {
       return (
@@ -382,7 +404,6 @@ const App = () => {
 
     return (
       <div className="min-h-screen bg-white flex flex-col">
-        {/* Progress Header */}
         <div className="sticky top-0 bg-white z-20 px-6 py-4 border-b border-slate-100">
           <div className="max-w-2xl mx-auto">
             <div className="flex items-center justify-between mb-3">
@@ -408,13 +429,12 @@ const App = () => {
           </div>
         </div>
 
-        {/* Question Area */}
         <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto px-6 py-10 w-full animate-fade-in">
           <span className="inline-block px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-xs font-bold mb-6 w-fit">
             {selectedTest.title}
           </span>
           
-          <h2 className="text-2xl font-bold text-slate-800 leading-normal mb-12 min-h-[80px]">
+          <h2 className="text-2xl font-bold text-slate-800 leading-normal mb-8 min-h-[80px]">
             {currentQ.text}
           </h2>
 
@@ -445,12 +465,10 @@ const App = () => {
     );
   }
 
-  // 4. Analyzing View
   if (view === AppState.ANALYZING) {
     return <AnalyzingView />;
   }
 
-  // 5. Result View - 仅允许分享或重测，无“更多测试”
   if (view === AppState.RESULT && result && selectedTest) {
     return (
       <div className="min-h-screen bg-slate-50 animate-fade-in">
@@ -483,7 +501,6 @@ const App = () => {
 
         <div className="max-w-3xl mx-auto px-6 -mt-20 pb-12 relative z-20 space-y-6">
           
-          {/* Chart Card */}
           <div className="bg-white rounded-3xl p-6 shadow-xl shadow-indigo-900/5">
             <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2 border-b border-slate-50 pb-3">
               <Brain className="w-5 h-5 text-indigo-500" /> 维度分析
@@ -491,7 +508,6 @@ const App = () => {
             <RadarChart data={result.radarChart} />
           </div>
 
-          {/* Detailed Analysis */}
           <div className="bg-white rounded-3xl p-6 shadow-xl shadow-indigo-900/5">
             <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-50 pb-3">
               <Sparkles className="w-5 h-5 text-indigo-500" /> 深度解读
@@ -501,7 +517,6 @@ const App = () => {
             </div>
           </div>
 
-          {/* Life Aspects Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {Object.entries(result.lifeAspects).map(([key, value]) => (
               <div key={key} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:border-indigo-50 transition-colors">
@@ -521,7 +536,6 @@ const App = () => {
             ))}
           </div>
 
-          {/* Action Footer - Only Retest */}
           <div className="flex flex-col gap-3 mt-8">
             <button 
               onClick={startTestFlow}

@@ -10,9 +10,11 @@ export interface TestConfig {
 export interface Question {
   id: number;
   text: string;
+  dimension: string; // The specific personality dimension this question measures
   options: {
     label: string;
     value: number | string;
+    score?: number; // Optional specific score weight
   }[];
 }
 
@@ -24,6 +26,7 @@ export interface ChartDataPoint {
 
 export interface AnalysisResult {
   mainArchetype: string;
+  secondaryArchetype: string; // New: Secondary trait
   shortQuote: string;
   detailedAnalysis: string; // Markdown supported
   personalityTraits: string[];
